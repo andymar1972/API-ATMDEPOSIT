@@ -25,56 +25,85 @@ import org.springframework.stereotype.Service;
 @Service
 public class AtmDepositServiceImpl implements AtmDepositService {
 
-  @Autowired
-  PersonClient personClient;
-  @Autowired
-  FingerPrintClient fingerClient;
-  @Autowired
-  ReniecClient reniecClient;
-  @Autowired
-  CardClient cardClient;
-  @Autowired
-  AccountClient accountClient;
+	@Autowired
+	PersonClient personClient;
+	@Autowired
+	FingerPrintClient fingerClient;
+	@Autowired
+	ReniecClient reniecClient;
+	@Autowired
+	CardClient cardClient;
+	@Autowired
+	AccountClient accountClient;
+	
+	AccountResponseAtm accountResponseAtm;
 
-  AtmDepositResponse atmResponse = new AtmDepositResponse();
+	@Override
+	public AtmDepositResponse findByDocument(AtmDepositRequest atmRequest) {
 
-  @Override
-  public AtmDepositResponse findByDocument(AtmDepositRequest atmRequest) {
-    
-    // Operaciones Api Person
-    PersonResponse personResponse = personClient.findByDocument(atmRequest.getDocumentNumber());
-    
-    // Operaciones API Fingerprints/API Reniec
-    if (personResponse.isFingerPrint()) {
-      FingerPrintRequest fingerRequest = new FingerPrintRequest();
-      fingerRequest.setDocument(atmRequest.getDocumentNumber());
-      FingerPrintResponse fingerResponse = fingerClient.validate(fingerRequest);
-      atmResponse.setFingerprintEntityName(fingerResponse.getEntityName());
-    } else {
-      ReniecRequest reniecRequest = new ReniecRequest();
-      reniecRequest.setDocument(atmRequest.getDocumentNumber());
-      ReniecResponse reniecResponse = reniecClient.validate(reniecRequest);
-      atmResponse.setFingerprintEntityName(reniecResponse.getEntityName());
-    }
-    
-    // Operaciones API Accounts
-    CardResponse cardResponse = cardClient.findByDocument(atmRequest.getDocumentNumber());
-    List<Card> listCards = cardResponse.getCards();
-    List<Card> cardsActive = listCards.stream()
-        .filter(card -> card.isActive()).collect(Collectors.toList());
-    List<AccountResponse> listAccountResponse = new ArrayList<>();
-    List<AccountResponseAtm> listAccountResponseAtm = new ArrayList<>();
-    cardsActive.parallelStream().forEach(card -> {
-      AccountResponse accountResponse = accountClient.findByCardNumber(card.getCardNumber());
-      listAccountResponse.add(accountResponse);
-      AccountResponseAtm accountResponseAtm = new AccountResponseAtm();
-      accountResponseAtm.setAccountNumber(accountResponse.getAccountNumber());
-      listAccountResponseAtm.add(accountResponseAtm);
-      atmResponse.setValidAccounts(listAccountResponseAtm);
-      atmResponse.sumAmmount(accountResponse.getAmount());
-    });
-    
-    return atmResponse;
-  }
+		AtmDepositResponse atmResponse = new AtmDepositResponse();
+
+		// Operaciones Api Person
+		PersonResponse personResponse = findPersonClient(atmRequest.getDocumentNumber());
+
+		// Operaciones API Fingerprints/API Reniec
+		if (personResponse.isFingerPrint()) {
+			FingerPrintRequest fingerRequest = new FingerPrintRequest(atmRequest.getDocumentNumber());
+			FingerPrintResponse fingerResponse = findFingerClient(fingerRequest);
+			atmResponse.setFingerprintEntityName(fingerResponse.getEntityName());
+		} else {
+			ReniecRequest reniecRequest = new ReniecRequest(atmRequest.getDocumentNumber());
+			ReniecResponse reniecResponse = findReniecClient(reniecRequest);
+			atmResponse.setFingerprintEntityName(reniecResponse.getEntityName());
+		}
+
+		// Operaciones API Accounts
+		CardResponse cardResponse = findCardClient(atmRequest.getDocumentNumber());
+
+		List<Card> listCards = cardResponse.getCards();
+
+		List<Card> cardsActive = listCards.stream().filter(card -> card.isActive()).collect(Collectors.toList());
+
+		List<AccountResponse> listAccountResponse = new ArrayList<>();
+
+		List<AccountResponseAtm> listAccountResponseAtm = new ArrayList<>();
+
+		cardsActive.parallelStream().forEach(card -> {
+			AccountResponse accountResponse = findAccountClient(card.getCardNumber());
+			
+			listAccountResponse.add(accountResponse);
+			
+			accountResponseAtm = new AccountResponseAtm();
+			
+			accountResponseAtm.setAccountNumber(accountResponse.getAccountNumber());
+			
+			listAccountResponseAtm.add(accountResponseAtm);
+			
+			atmResponse.setValidAccounts(listAccountResponseAtm);
+			atmResponse.sumAmmount(accountResponse.getAmount());
+		});
+
+		return atmResponse;
+	}
+
+	public PersonResponse findPersonClient(String document) {
+		return personClient.findByDocument(document);
+	}
+
+	public FingerPrintResponse findFingerClient(FingerPrintRequest fingerRequest) {
+		return fingerClient.validate(fingerRequest);
+	}
+
+	public ReniecResponse findReniecClient(ReniecRequest reniecRequest) {
+		return reniecClient.validate(reniecRequest);
+	}
+
+	public CardResponse findCardClient(String document) {
+		return cardClient.findByDocument(document);
+	}
+
+	public AccountResponse findAccountClient(String cardNumber) {
+		return accountClient.findByCardNumber(cardNumber);
+	}
 
 }
